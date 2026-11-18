@@ -13,6 +13,9 @@ Browser printing (`window.print`) cannot fit the label, because the Windows "Gen
 
 ## Every time you print
 
+After switching the printer on, press its **FEED** button once so it finds the label start (found in use: without
+this the first labels can print shifted).
+
 Start the helper and leave its window open:
 
 ```
@@ -26,6 +29,12 @@ Then press **Print Label (XP-365B)** on the asset page.
 - Different printer queue name: `-PrinterName "My Printer"`. Different port: `-Port 9102`, and set
   `VITE_LABEL_AGENT_URL=http://127.0.0.1:9102` for the frontend.
 - `-DryRun` answers requests without printing, for testing.
+- `-Calibrate` makes the printer measure the label gap and length again before the helper starts listening
+  (commands in `scripts/xp365b-calibrate.tspl`). Use it for a newly connected printer, a new roll, or when labels
+  print shifted. It feeds 2 to 4 blank labels, so it is not done on every start.
+
+Every print also clears any position offset stored in the printer (`REFERENCE 0,0`, `SHIFT 0`), so a printer that
+was set up differently on another PC prints in the same place. Windows printer settings do not affect these raw prints.
 
 ## What is printed
 

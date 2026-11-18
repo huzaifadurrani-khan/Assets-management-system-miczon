@@ -11,6 +11,9 @@
 #   ... -AllowedOrigins "http://localhost:5173","https://assets.example.com"
 # Check the request handling without printing a label:
 #   ... -DryRun
+# Re-learn the label start/length first (new printer, new roll, or labels printing shifted). This feeds
+# 2 to 4 blank labels, so use it only when needed; the commands are in scripts/xp365b-calibrate.tspl:
+#   ... -Calibrate
 #
 # Requests (JSON):
 #   GET  /health                                      -> {"ok":true,...}
@@ -19,7 +22,8 @@ param(
     [int]$Port = 9101,
     [string[]]$AllowedOrigins = @("http://localhost:5173", "http://127.0.0.1:5173"),
     [string]$PrinterName = "Xprinter XP-365B",
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$Calibrate
 )
 
 $ErrorActionPreference = "Stop"
@@ -126,6 +130,8 @@ function New-LabelTspl([string]$Data, [string[]]$Lines, [int]$Copies) {
 
     return "SIZE $paperWidth mm,$labelHeight mm`r`n" +
            "GAP $gap mm,0 mm`r`n" +
+           "REFERENCE 0,0`r`n" +   # clear any position offset stored in this printer
+           "SHIFT 0`r`n" +
            "DIRECTION 1`r`n" +
            "CLS`r`n" +
            $body +
@@ -219,6 +225,20 @@ function Read-Body($Request) {
 if (-not $DryRun -and -not (Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue)) {
     Write-Error "Printer '$PrinterName' is not installed on this PC."
     exit 1
+}
+
+# Optional start-up calibration: the printer measures the label gap and length again.
+if ($Calibrate) {
+    $calibrationFile = Join-Path $PSScriptRoot "xp365b-calibrate.tspl"
+    if (-not (Test-Path $calibrationFile)) { Write-Error "Calibration file not found: $calibrationFile"; exit 1 }
+    $calibration = (Get-Content -Raw $calibrationFile) -replace "`r?`n", "`r`n"
+    if ($DryRun) {
+        Write-Host "DRY RUN: would calibrate with:`r`n$calibration"
+    } else {
+        $result = [RawPrint]::Send($PrinterName, [Text.Encoding]::ASCII.GetBytes($calibration))
+        if ($result -ne "OK") { Write-Error "Calibration was not accepted by the printer ($result)."; exit 1 }
+        Write-Host "Calibration sent: the printer will feed a few blank labels."
+    }
 }
 
 $listener = New-Object System.Net.HttpListener
